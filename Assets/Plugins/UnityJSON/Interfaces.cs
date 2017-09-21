@@ -40,7 +40,7 @@ namespace UnityJSON
 		/// Feeds the JSON node into the object. You can use the
 		/// helper methods from the deserializer.
 		/// </summary>
-		void Deserialize(JSONNode node, Deserializer deserializer);
+		void Deserialize (JSONNode node, Deserializer deserializer);
 	}
 
 	/// <summary>
@@ -53,19 +53,19 @@ namespace UnityJSON
 		/// This call will always be followed by either OnSerializationSucceeded
 		/// or OnSerializationFailed but not both.
 		/// </summary>
-		void OnSerializationWillBegin(Serializer serializer);
+		void OnSerializationWillBegin (Serializer serializer);
 
 		/// <summary>
 		/// Called immediately after a successful completion of this
 		/// object's serialization.
 		/// </summary>
-		void OnSerializationSucceeded(Serializer serializer);
+		void OnSerializationSucceeded (Serializer serializer);
 
 		/// <summary>
 		/// Called when the serialization of the object fails for any
 		/// reason. This will be called just before throwing the exception.
 		/// </summary>
-		void OnSerializationFailed(Serializer serializer);
+		void OnSerializationFailed (Serializer serializer);
 	}
 
 	/// <summary>
@@ -78,18 +78,18 @@ namespace UnityJSON
 		/// This call will always be followed by either OnDeserializationSucceeded
 		/// or OnDeserializationFailed but not both.
 		/// </summary>
-		void OnDeserializationWillBegin(Deserializer deserializer);
+		void OnDeserializationWillBegin (Deserializer deserializer);
 
 		/// <summary>
 		/// Called immediately after a successful completion of this
 		/// object's deserialization.
 		/// </summary>
-		void OnDeserializationSucceeded(Deserializer deserializer);
+		void OnDeserializationSucceeded (Deserializer deserializer);
 
 		/// <summary>
 		/// Called when the deserialization of the object fails for any
 		/// reason. This will be called just before throwing the exception.
 		/// </summary>
-		void OnDeserializationFailed(Deserializer deserializer);
+		void OnDeserializationFailed (Deserializer deserializer);
 	}
 }

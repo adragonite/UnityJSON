@@ -177,7 +177,7 @@ namespace UnityJSON
 			if (node == null || node.IsNull) {
 				return null;
 			}
-			return (Nullable<T>) Deserialize (node, typeof(T), options);
+			return (Nullable<T>)Deserialize (node, typeof(T), options);
 		}
 
 		/// <summary>
@@ -842,11 +842,16 @@ namespace UnityJSON
 			var conditionalAttributes = type.GetCustomAttributes (typeof(ConditionalInstantiationAttribute), false);
 			foreach (object attribute in conditionalAttributes) {
 				var condition = attribute as ConditionalInstantiationAttribute;
-				if (Equals (node [condition.key].Value, condition.value.ToString())) {
+				if (Equals (node [condition.key].Value, condition.value.ToString ())) {
+					JSONNode value = node [condition.key];
 					if (condition.removeKey) {
 						node.Remove (condition.key);
 					}
-					return Deserialize (node, condition.referenceType, options);
+					object result = Deserialize (node, condition.referenceType, options);
+					if (condition.removeKey) {
+						node.Add (condition.key, value);
+					}
+					return result;
 				}
 			}
 
@@ -855,15 +860,60 @@ namespace UnityJSON
 				return Deserialize (node, defaultAttribute.referenceType, options);
 			}
 
-			object obj;
-			try {
-				obj = Activator.CreateInstance (type);
-			} catch (Exception) {
-				return _HandleUnknown (options, "Unknown type " + type + " cannot be instantiated.");
+			object obj = null;
+			KeyValuePair<string, JSONNode>[] removedKeys = null;
+			ConstructorInfo[] constructors = type.GetConstructors (
+				                                 BindingFlags.Instance |
+				                                 BindingFlags.Public |
+				                                 BindingFlags.NonPublic);
+			foreach (ConstructorInfo constructor in constructors) {
+				var constructorAttribute = Util.GetAttribute<JSONConstructorAttribute> (constructor);
+				if (constructorAttribute != null) {
+					obj = _CreateObjectWithConstructor (type, constructor, node, out removedKeys);
+					break;
+				}
+			}
+
+			if (obj == null) {
+				try {
+					obj = Activator.CreateInstance (type);
+				} catch (Exception) {
+					return _HandleUnknown (options, "Unknown type " + type + " cannot be instantiated.");
+				}
 			}
 				
 			DeserializeOn (obj, node, options);
+			if (removedKeys != null) {
+				foreach (var pair in removedKeys) {
+					node.Add (pair.Key, pair.Value);
+				}
+			}
 			return obj;
+		}
+
+		private object _CreateObjectWithConstructor (
+			Type type,
+			ConstructorInfo constructor, 
+			JSONNode node,
+			out KeyValuePair<string, JSONNode>[] removedKeys)
+		{
+			ParameterInfo[] parameters = constructor.GetParameters ();
+			object[] parameterValues = new object[parameters.Length];
+			removedKeys = new KeyValuePair<string, JSONNode>[parameterValues.Length];
+
+			for (int i = 0; i < parameterValues.Length; i++) {
+				var parameterAttribute = Util.GetAttribute<JSONNodeAttribute> (parameters [i]);
+				string key = parameterAttribute != null && parameterAttribute.key != null
+					? parameterAttribute.key : parameters [i].Name;
+				parameterValues [i] = Deserialize (
+					node [key], 
+					parameters [i].ParameterType, 
+					parameterAttribute == null ? NodeOptions.Default : parameterAttribute.options);
+
+				removedKeys [i] = new KeyValuePair<string, JSONNode> (key, node [key]);
+				node.Remove (key);
+			}
+			return Activator.CreateInstance (type, parameterValues);
 		}
 
 		private void _FeedCustom (object filledObject, JSONNode node, NodeOptions options)

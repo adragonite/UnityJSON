@@ -10,7 +10,10 @@ namespace UnityJSON
 	/// attribute, the default options are used. For private fields and
 	/// properties, this attribute is mandatory.
 	/// </summary>
-	[AttributeUsage (AttributeTargets.Field | AttributeTargets.Property)]
+	[AttributeUsage (
+		AttributeTargets.Field |
+		AttributeTargets.Property |
+		AttributeTargets.Parameter)]
 	public class JSONNodeAttribute : Attribute
 	{
 		private NodeOptions _options;
@@ -318,6 +321,19 @@ namespace UnityJSON
 		/// </summary>
 		public Type referenceType {
 			get { return _reference; }
+		}
+	}
+
+	/// <summary>
+	/// Marks a constructor that is used to deserialize objects.
+	/// Every class can use this attribute maximum one times. The
+	/// parameters can have JSONNodeAttributes.
+	/// </summary>
+	[AttributeUsage (AttributeTargets.Constructor)]
+	public class JSONConstructorAttribute : Attribute
+	{
+		public JSONConstructorAttribute () : base ()
+		{
 		}
 	}
 }

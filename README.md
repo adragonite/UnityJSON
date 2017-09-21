@@ -14,10 +14,13 @@
 * [Deserialization](#deserialization)
   - [Deserialized Types](#deserialized-types)
   - [Deserialization of Extra Nodes](#deserialization-of-extra-nodes)
-  - [Deserialization with Inheritance](#deserialization-with-inheritance)
+  - [Inheritance](#inheritance)
+  - [Constructors](#constructors)
   - [Deserialization Lifecycle](#deserialization-lifecycle)
   - [Custom Deserialization with Deserializer](#custom-deserialization-with-deserializer)
   - [Custom Deserialization with IDeserializable](#custom-deserialization-with-ideserializable)
+* [Changelog](#changelog)
+  - [v1.1](#v11)
 
 ## Features
 
@@ -445,7 +448,7 @@ You can also use `RestrictTypeAttribute` to restrict the supported types or use 
 types. The extras are also used for the serialization and are serialized on the same level
 as the object.
 
-### Deserialization with Inheritance
+### Inheritance
 
 You may want to provide deserialization to interface or abstract class targets. One option
 would be to use a custom deserializer 
@@ -482,6 +485,26 @@ class C : I
 }
 
 I obj = JSON.Deserialize<I>("{\"type\":1}"); // obj is of type B.
+```
+
+### Constructors
+
+You can deserialize objects with custom constructors using the `JSONConstructor`
+attribute. The constructor arguments can have additional `JSONNode` attributes. Be
+aware that only one constructor can have this attribute.
+
+```cs
+class AClass<T>
+{
+    private T _arg;
+
+    [JSONConstructor]
+    public AClass([JSONNode(key = "field")] T argument)
+    {
+        _arg = argument; 
+    }
+}
+var obj = Deserialize<AClass<int>>("{\"field\":1}");
 ```
 
 ### Deserialization Lifecycle
@@ -596,3 +619,10 @@ public class AClass : IDeserializable
 
 The classes that are deserialized with the `IDeserializable.Deserialize` method do 
 not receive deserialization lifecycle calls from `IDeserializationListener`.
+
+## Changelog
+
+### v1.1
+
+- Added `JSONConstructorAttribute`
+- Fixed conditional instantiation bug: JSONNode kept the same after key removal

@@ -49,7 +49,7 @@ namespace UnityJSON
 		/// </summary>
 		public bool useUndefinedForNull = false;
 
-		private Serializer()
+		private Serializer ()
 		{
 		}
 
@@ -98,7 +98,7 @@ namespace UnityJSON
 				Type type = obj.GetType ();
 				if (type.IsValueType) {
 					if (type.IsEnum) {
-						result = _SerializeEnum ((Enum) obj);
+						result = _SerializeEnum ((Enum)obj);
 					} else if (type.IsPrimitive) {
 						if (obj is bool) {
 							result = SerializeBool ((bool)obj);
@@ -236,7 +236,7 @@ namespace UnityJSON
 		public string SerializeVector4 (Vector4 vector)
 		{
 			return "{\"x\":" + vector.x + ",\"y\":" + vector.y
-				+ ",\"z\":" + vector.z + ",\"w\":" + vector.w + "}";
+			+ ",\"z\":" + vector.z + ",\"w\":" + vector.w + "}";
 		}
 
 		/// <summary>
@@ -245,7 +245,7 @@ namespace UnityJSON
 		public string SerializeQuaternion (Quaternion quaternion)
 		{
 			return "{\"x\":" + quaternion.x + ",\"y\":" + quaternion.y
-				+ ",\"z\":" + quaternion.z + ",\"w\":" + quaternion.w + "}";
+			+ ",\"z\":" + quaternion.z + ",\"w\":" + quaternion.w + "}";
 		}
 
 		/// <summary>
@@ -254,7 +254,7 @@ namespace UnityJSON
 		public string SerializeColor (Color color)
 		{
 			return "{\"r\":" + color.r + ",\"g\":" + color.g
-				+ ",\"b\":" + color.b + ",\"a\":" + color.a + "}";
+			+ ",\"b\":" + color.b + ",\"a\":" + color.a + "}";
 		}
 
 		/// <summary>
@@ -263,7 +263,7 @@ namespace UnityJSON
 		private string SerializeRect (Rect rect)
 		{
 			return "{\"x\":" + rect.x + ",\"y\":" + rect.y
-				+ ",\"width\":" + rect.width + ",\"height\":" + rect.height + "}";
+			+ ",\"width\":" + rect.width + ",\"height\":" + rect.height + "}";
 		}
 
 		/// <summary>
@@ -272,7 +272,7 @@ namespace UnityJSON
 		private string SerializeBounds (Bounds bounds)
 		{
 			return "{\"center\":" + SerializeVector3 (bounds.center)
-				+ ",\"extents\":" + SerializeVector3 (bounds.extents) + "}";
+			+ ",\"extents\":" + SerializeVector3 (bounds.extents) + "}";
 		}
 
 		private string _SerializeString (string stringValue)
@@ -286,7 +286,7 @@ namespace UnityJSON
 			JSONEnumAttribute enumAttribute = Util.GetAttribute<JSONEnumAttribute> (type);
 			if (enumAttribute != null) {
 				if (enumAttribute.useIntegers) {
-					return (Convert.ToInt32(obj)).ToString ();
+					return (Convert.ToInt32 (obj)).ToString ();
 				} else {
 					string formatted = _FormatEnumMember (obj.ToString (), enumAttribute.format);
 					if (enumAttribute.prefix != null) {
@@ -395,14 +395,15 @@ namespace UnityJSON
 					var extras = Util.GetMemberValue (extrasMember, obj) as IEnumerable;
 					if (extras != null) {
 						result += (result == "" ? "" : ",")
-							+ _SerializeEnumarable (extras, extrasAttribute.options);
+						+ _SerializeEnumarable (extras, extrasAttribute.options);
 					}
 				}
 
 				if (listener != null) {
 					listener.OnSerializationSucceeded (this);
 				}
-				return  "{" + result + "}";;
+				return  "{" + result + "}";
+				;
 			} catch (Exception exception) {
 				if (listener != null) {
 					listener.OnSerializationFailed (this);

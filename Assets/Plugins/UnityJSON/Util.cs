@@ -13,6 +13,12 @@ namespace UnityJSON
 			return (attributes == null || attributes.Length == 0) ? null : attributes [0] as T;
 		}
 
+		internal static T GetAttribute<T> (ParameterInfo info) where T : Attribute
+		{
+			object[] attributes = info.GetCustomAttributes (typeof(T), true);
+			return (attributes == null || attributes.Length == 0) ? null : attributes [0] as T;
+		}
+
 		internal static Type GetMemberType (MemberInfo memberInfo)
 		{
 			return memberInfo is FieldInfo ?
