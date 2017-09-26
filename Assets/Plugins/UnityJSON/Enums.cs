@@ -44,19 +44,19 @@
 		IgnoreTypeMismatch = 1 << 3,
 
 		/// <summary>
-		/// If the C# type cannot be instantiated, then an error is thrown.
+		/// If the C# type cannot be instantiated, then an InstantiationException is thrown.
 		/// This can for instance happen for classes with custom constructors
 		/// that are not defined in the deserializer. When used, this option
 		/// forces the deserializer to ignore this error and simply return null 
 		/// from the deserialization.
 		/// </summary>
-		IgnoreUnknownType = 1 << 4,
+		IgnoreInstantiationError = 1 << 4,
 
 		/// <summary>
-		/// Ignore both the type mismatch and the unknown type errors for
+		/// Ignore both the type mismatch and instantiation errors for
 		/// deserialization.
 		/// </summary>
-		IgnoreDeserializationTypeErrors = IgnoreTypeMismatch | IgnoreUnknownType,
+		IgnoreDeserializationTypeErrors = IgnoreTypeMismatch | IgnoreInstantiationError,
 
 		/// <summary>
 		/// When deserializing a JSON string, the null or undefined values are
@@ -241,7 +241,7 @@
 		/// </summary>
 		public static bool ShouldIgnoreUnknownType (this NodeOptions options)
 		{
-			return (options & NodeOptions.IgnoreUnknownType) != 0;
+			return (options & NodeOptions.IgnoreInstantiationError) != 0;
 		}
 
 		/// <summary>

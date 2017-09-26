@@ -17,9 +17,11 @@
   - [Inheritance](#inheritance)
   - [Constructors](#constructors)
   - [Deserialization Lifecycle](#deserialization-lifecycle)
+  - [Custom Deserialization with Instantiater](#custom-deserialization-with-instantiater)
   - [Custom Deserialization with Deserializer](#custom-deserialization-with-deserializer)
   - [Custom Deserialization with IDeserializable](#custom-deserialization-with-ideserializable)
 * [Changelog](#changelog)
+  - [v2.0](#v20)
   - [v1.1](#v11)
 
 ## Features
@@ -234,7 +236,7 @@ serialization lifecycle calls from `ISerializationListener`.
 
 ## Deserialization
 
-You can perform deserialization by calling `JSON.Deserialize\<T\>(jsonString)` method.
+You can perform deserialization by calling `JSON.Deserialize<T>(jsonString)` method.
 This will instantiate a new object of that type and fill it with the data from the
 JSON string. If you wish to use a previously created object, you can also use one of the
 `JSON.DeserializeOn(obj, jsonString)` or `obj.FeedJSON(jsonString)` methods. This object
@@ -289,7 +291,7 @@ public class AClass
     // Don't throw an exception even if the deserializer cannot
     // instantiate an object for the type. This can for example
     // happen for classes without a default constructor.
-    [JSONNode(NodeOptions.IgnoreUnknownType)]
+    [JSONNode(NodeOptions.IgnoreInstantiationError)]
     public ClassWithConstructor classField;
 
     // Even if the JSON object has a "customField" key, don't
@@ -306,7 +308,7 @@ case of any problems. By default, the exception is thrown in the following scena
 a string and the node contains a boolean value. This is called a type mismatch error. You
 can ignore it with the `NodeOptions.IgoreTypeMismatch` option.
 - The target type cannot be instantiated or is not supported. This is called an unknown
-type error. You can ignore it with the `NodeOptions.IgnoreUnknownType` option.
+type error. You can ignore it with the `NodeOptions.IgnoreInstantiationError` option.
 - The JSON node cannot contain unknown keys that cannot be mapped to the fields and properties
 of the class / struct. In such a scenario an exception is thrown, this is called an
 unknown key error and can be ignored with `ObjectOptions.IgnoreUnknownKey` option given
@@ -451,8 +453,8 @@ as the object.
 ### Inheritance
 
 You may want to provide deserialization to interface or abstract class targets. One option
-would be to use a custom deserializer 
-(see [Custom Deserialization: Deserializer](#custom-deserialization-with-deserializer)), however
+would be to use a custom instantiater 
+(see [Custom Deserialization with Instantiater](#custom-deserialization-with-instantiater)), however
 in most cases you can also simply do that by using `ConditionalInstantiation` and 
 `DefaultInstantiation` attributes. These can redirect the instantiated types for an
 interface or a class. `ConditionalInstantiationAttribute` checks for a key value pair in
@@ -535,40 +537,62 @@ public class AClass : IDeserializationListener
 The `OnDeserializationWillBegin` call is always followed by either the success or
 fail call. The fail method is called just before throwing an exception.
 
+## Custom Deserialization with Instantiater
+
+Intantiater is the component that is responsible for instantiating instances of
+an object. The basic instantiater can be accessed with `Instantiater.Simple`. Every
+deserializer has an instantiater associated with it. You can subclass the 
+instantiater to perform your application-specific logic in 
+`Instantiater.TryInstantiate`.
+
+```cs
+public class SpecialInstantiater : Instantiater
+{
+    protected override bool TryInstantiate (
+        JSONNode node,
+        Type targetType,
+        Type referingType,
+        NodeOptions options,
+        Deserializer deserializer,
+        out InstantiationData instantiationData)
+    {
+        if (type == typeof(MySpecialClass)) {
+            // Custom deserializers can be used to instantiate classes
+            // with constructors.
+            instantiationData = new InstantiationData();
+            instantiationData.instantiatedObject 
+                = new MySpecialClass(node["key"]);
+            instantiationData.needsDeserialization = true;
+            instantiationData.ignoredKeys = new HashSet<string> { "key "};
+            return true;
+        } else {
+            // Returning false will simply run the regular
+            // instantiation process.
+            instantiationData = InstantiationData.Null;
+            return false;
+        }
+    }
+}
+
+Deserializer.Default.instantiater = new SpecialInstantiater();
+var obj = JSON.Deserialize<MySpecialClass>(jsonString);
+```
+
 ## Custom Deserialization with Deserializer
 
 Deserializer is the actual component that performs the deserialization. The
 basic deserializer can be accessed with `Deserializer.Simple`. When no specific
 deserializer is given, the default deserializer is used (`Deserializer.Default`). 
-The default deserializer is the simple deserializer unless set otherwise. You can
+The default deserializer is the simple deserializer unless set otherwise. The
+deserializer has an associated `Instantiater` to instantiate instances of objects.
+You can change this instantiater from `Deserializer.instantiater`. You can
 create your own deserializer by simply subclassing `Deserializer`. You should then
-override the `Deserializer.TryInstantiate` and  `Deserializer.TryDeserializeOn` methods 
-to perform your application specific deserialization. These two methods are
-independent of each other and represent the two steps of deserialization:
-instantiation of the object and feeding the JSON string inside. You can decide to
-override only one method too.
+override the `Deserializer.TryDeserializeOn` method 
+to perform your application specific deserialization.
 
 ```cs
 public class SpecialDeserializer : Deserializer
 {
-    protected override bool TryInstantiate (
-        JSONNode node,
-        Type type,
-        NodeOptions options,
-        out object instantiatedObject)
-    {
-        if (type == typeof(MySpecialClass)) {
-            // Custom deserializers can be used to instantiate classes
-            // with constructors.
-            instantiatedObject = new MySpecialClass(node["key"]);
-            return true;
-        } else {
-            // Returning false will simply run the regular
-            // instantiation process.
-            return false;
-        }
-    }
-
     protected override bool TryDeserialize (
         object obj,
         JSONNode node,
@@ -586,16 +610,15 @@ public class SpecialDeserializer : Deserializer
     }
 }
 
-var deserializer = new SpecialDeserializer();
-var obj = JSON.Deserialize<MySpecialClass>(jsonString, deserializer);
+mySpecialObject.FeedJSON(jsonString, new SpecialDeserializer());
 ```
 
 When the `Deserializer.Deserialize` method is called, it first tries to
-instantiate the object with the `Deserializer.TryInstantiate` method, if
-that fails, then the regular type based instantiation is performed. When
+instantiate the object with its assigned instantiater. When
 the object is instantiated, the `Deserializer.DeserializeOn` method is called
 on the object. This first tries the custom `Deserializer.TryDeserialize`
-method and then performs the regular framework deserialization if that fails.
+method, then `IDeserializable.Deserialize` if the object implements the interface,
+and finally performs the regular framework deserialization if all fails.
 
 The classes that are deserialized with the `Deserializer.TryDeserialize` method 
 do not receive deserialization lifecycle calls from `IDeserializationListener`.
@@ -621,6 +644,16 @@ The classes that are deserialized with the `IDeserializable.Deserialize` method 
 not receive deserialization lifecycle calls from `IDeserializationListener`.
 
 ## Changelog
+
+### v2.0
+
+- Bug fixes
+- Added Serializer.SerializeByParts
+- Added Deserializer.DeserializeByParts and deserializer methods taking JSON
+string arguments
+- Created the class Instantiater
+- Allows use of RestrictTypeAttribute with constructor arguments
+- Introduces InstantiationData to work around ignored keys
 
 ### v1.1
 

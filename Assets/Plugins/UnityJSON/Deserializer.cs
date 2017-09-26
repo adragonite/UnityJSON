@@ -28,7 +28,6 @@ namespace UnityJSON
 	public class Deserializer
 	{
 		private static Deserializer _default = new Deserializer ();
-		private static Deserializer _simple = _default;
 
 		/// <summary>
 		/// The default deserializer to be used when no deserializer is given.
@@ -41,35 +40,29 @@ namespace UnityJSON
 				if (value == null) {
 					throw new ArgumentNullException ("default deserializer");
 				}
-				_simple = value;
+				_default = value;
 			}
 		}
 
 		/// <summary>
 		/// The initial deserializer that is provided by the framework.
 		/// </summary>
-		public static Deserializer Simple {
-			get { return _simple; }
-		}
+		public static readonly Deserializer Simple = new Deserializer ();
+
+		private Instantiater _instantiater = Instantiater.Default;
 
 		/// <summary>
-		/// Tries to instantiate an object of a given type. This will be called
-		/// for all custom objects before trying to instantiate the object with a
-		/// default constructor.
-		/// 
-		/// Subclasses should override this method to provide instantiated versions
-		/// for classes with constructors with arguments or interfaces or abstract
-		/// classes. The JSON node can be used to decide which class or struct to
-		/// instantiate.
+		/// The instantiater associated with this deserializer. If not set,
+		/// the simple instantiater is used.
 		/// </summary>
-		protected virtual bool TryInstantiate (
-			JSONNode node, 
-			Type type,
-			NodeOptions options,
-			out object instantiatedObject)
-		{
-			instantiatedObject = null;
-			return false;
+		public Instantiater instantiater {
+			get { return _instantiater; }
+			set {
+				if (value == null) {
+					throw new ArgumentNullException ("instantiater");
+				}
+				_instantiater = value;
+			}
 		}
 
 		/// <summary>
@@ -81,26 +74,50 @@ namespace UnityJSON
 		protected virtual bool TryDeserializeOn (
 			object obj,
 			JSONNode node,
-			NodeOptions options)
+			NodeOptions options,
+			HashSet<string> ignoredKeys)
 		{
 			return false;
 		}
 
 		/// <summary>
 		/// Deserializes the JSON string directly on the object. Throws an
-		/// ArgumentNullException of the object is <c>null</c>.
+		/// ArgumentNullException of the object is <c>null</c>. This will first
+		/// try #TryDeserialize method and then IDeserializable.Deserialize if the
+		/// object implements the interface. This performs a general deserialization
+		/// and classes should prefer specific methods for manual deserialization.
+		/// </summary>
+		public void DeserializeOn (
+			object obj, 
+			string jsonString, 
+			NodeOptions options = NodeOptions.Default,
+			HashSet<string> ignoredKeys = null)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			DeserializeOn (obj, node, options, ignoredKeys);
+		}
+
+		/// <summary>
+		/// Deserializes the JSON node directly on the object. Throws an
+		/// ArgumentNullException of the object is <c>null</c>. This will first
+		/// try #TryDeserialize method and then IDeserializable.Deserialize if the
+		/// object implements the interface. This performs a general deserialization
+		/// and classes should prefer specific methods for manual deserialization.
 		/// </summary>
 		public void DeserializeOn (
 			object obj, 
 			JSONNode node, 
-			NodeOptions options = NodeOptions.Default)
+			NodeOptions options = NodeOptions.Default,
+			HashSet<string> ignoredKeys = null)
 		{
 			if (obj == null) {
 				throw new ArgumentNullException ("obj");
 			}
-
-			if (TryDeserializeOn (obj, node, options)) {
-				return;
+			if (node == null) {
+				throw new ArgumentNullException ("node");
 			}
 
 			Type type = obj.GetType ();
@@ -108,20 +125,91 @@ namespace UnityJSON
 				throw new ArgumentException ("Cannot deserialize on enums.");
 			} else if (type.IsPrimitive) {
 				throw new ArgumentException ("Cannot deserialize on primitive types.");
-			} else if (!node.IsObject) {
-				throw new ArgumentException ("Expected a JSON object, found " + node.Tag);
-			} 
+			}
 
-			_FeedCustom (obj, node, options);
+			if (ignoredKeys == null) {
+				ignoredKeys = new HashSet<string> ();
+			}
+			_DeserializeOn (obj, node, options, ignoredKeys);
+		}
+
+		/// <summary>
+		/// Deserializes the JSON string directly on the object. Throws an
+		/// ArgumentNullException of the object is <c>null</c>. This ignore
+		/// manual deserialization options (see Deserializer.TryDeserialize and
+		/// IDeserializable.Deserialize).
+		/// </summary>
+		public void DeserializeByParts (
+			object obj, 
+			string jsonString, 
+			NodeOptions options = NodeOptions.Default,
+			HashSet<string> ignoredKeys = null)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			DeserializeByParts (obj, node, options, ignoredKeys);
+		}
+
+		/// <summary>
+		/// Deserializes the JSON node directly on the object. Throws an
+		/// ArgumentNullException of the object is <c>null</c>. This ignore
+		/// manual deserialization options (see Deserializer.TryDeserialize and
+		/// IDeserializable.Deserialize).
+		/// </summary>
+		public void DeserializeByParts (
+			object obj, 
+			JSONNode node, 
+			NodeOptions options = NodeOptions.Default,
+			HashSet<string> ignoredKeys = null)
+		{
+			if (obj == null) {
+				throw new ArgumentNullException ("obj");
+			}
+			if (node == null) {
+				throw new ArgumentNullException ("node");
+			}
+
+			Type type = obj.GetType ();
+			if (type.IsEnum) {
+				throw new ArgumentException ("Cannot deserialize on enums.");
+			} else if (type.IsPrimitive) {
+				throw new ArgumentException ("Cannot deserialize on primitive types.");
+			}
+
+			if (ignoredKeys == null) {
+				ignoredKeys = new HashSet<string> ();
+			}
+			_DeserializeByParts (obj, node, options, ignoredKeys);
+		}
+
+		/// <summary>
+		/// Deserializes the JSON string to a new object of the requested type. This
+		/// will first insantiate an object of the target type. The instantiation
+		/// will use the associated Instantiater for custom types. If an object can be
+		/// instantiated, #DeserializeOn method is used to feed the JSON into the object.
+		/// </summary>
+		/// <param name="jsonString">JSON string to deserialize.</param>
+		/// <param name="type">Requested type of the deserialized object.</param>
+		/// <param name="options">Deserialization options for the node (optional).</param>
+		public object Deserialize (
+			string jsonString, 
+			Type type, 
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return Deserialize (node, type, options);
 		}
 
 		/// <summary>
 		/// Deserializes the JSON node to a new object of the requested type. This
-		/// will first call #TryInstantiate to create an object for the type, then
-		/// try the default constructor without arguments. If an object can be
-		/// instantiated, then first the IDeserializable.Deserialize method will
-		/// be used if the object implements the interface. If not, the framework
-		/// deserialization will be performed.
+		/// will first insantiate an object of the target type. The instantiation
+		/// will use the associated Instantiater for custom types. If an object can be
+		/// instantiated, #DeserializeOn method is used to feed the JSON into the object.
 		/// </summary>
 		/// <param name="node">JSON node to deserialize.</param>
 		/// <param name="type">Requested type of the deserialized object.</param>
@@ -131,7 +219,34 @@ namespace UnityJSON
 			Type type, 
 			NodeOptions options = NodeOptions.Default)
 		{
-			return _Deserialize (node, type, options, ObjectTypes.JSON, null);
+			if (node == null) {
+				throw new ArgumentNullException ("node");
+			}
+			return Deserialize (node, type, options, ObjectTypes.JSON, null);
+		}
+
+		/// <summary>
+		/// Deserializes a JSON string into a C# System.Object type. If no restrictions
+		/// are given, the deserialized types can be doubles, booleans, strings, and arrays
+		/// and dictionaries thereof. Restricted types can allow custom types to create
+		/// classes or structs instead of dictionaries.
+		/// </summary>
+		/// <param name="jsonString">JSON string to deserialize.</param>
+		/// <param name="restrictedTypes">Restricted types for the object.</param>
+		/// <param name="customTypes">Allowed custom types for the object. Restrictions
+		/// must allow custom types if not <c>null</c>.</param>
+		/// <param name="options">Deserialization options.</param>
+		public object DeserializeToObject (
+			string jsonString,
+			ObjectTypes restrictedTypes = ObjectTypes.JSON,
+			Type[] customTypes = null,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToObject (jsonString, restrictedTypes, customTypes, options);
 		}
 
 		/// <summary>
@@ -151,8 +266,8 @@ namespace UnityJSON
 			Type[] customTypes = null,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (node == null || node.IsNull) {
-				return null;
+			if (node == null) {
+				throw new ArgumentNullException ("node");
 			}
 			if (customTypes != null) {
 				if (!restrictedTypes.SupportsCustom ()) {
@@ -168,16 +283,49 @@ namespace UnityJSON
 		}
 
 		/// <summary>
+		/// Deserializes a JSON string into a System.Nullable object.
+		/// </summary>
+		public Nullable<T> DeserializeToNullable<T> (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default) where T : struct
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToNullable<T> (node, options);
+		}
+
+		/// <summary>
 		/// Deserializes a JSON node into a System.Nullable object.
 		/// </summary>
 		public Nullable<T> DeserializeToNullable<T> (
 			JSONNode node,
 			NodeOptions options = NodeOptions.Default) where T : struct
 		{
-			if (node == null || node.IsNull) {
+			if (node == null) {
+				throw new ArgumentNullException ("node");
+			}
+			if (node.IsNull || node.Tag == JSONNodeType.None) {
 				return null;
 			}
 			return (Nullable<T>)Deserialize (node, typeof(T), options);
+		}
+
+		/// <summary>
+		/// Deserializes a JSON string into an integer. Throws an ArgumentNullException
+		/// if the string is <c>null</c>. Throws a CastException if the node does
+		/// not contain an integer.
+		/// </summary>
+		public int DeserializeToInt (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToInt (node, options);
 		}
 
 		/// <summary>
@@ -196,6 +344,22 @@ namespace UnityJSON
 		}
 
 		/// <summary>
+		/// Deserializes a JSON string into an unsigned integer. Throws an ArgumentNullException
+		/// if the string is <c>null</c>. Throws a CastException if the node does
+		/// not contain an unsigned integer.
+		/// </summary>
+		public uint DeserializeToUInt (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToUInt (node, options);
+		}
+
+		/// <summary>
 		/// Deserializes a JSON node into an unsigned integer. Throws an ArgumentNullException
 		/// if the node is <c>null</c>. Throws a CastException if the node does
 		/// not contain an unsigned integer.
@@ -208,6 +372,22 @@ namespace UnityJSON
 				throw new ArgumentNullException ("node");
 			}
 			return (uint)_DeserializeToUInt (node, options);
+		}
+
+		/// <summary>
+		/// Deserializes a JSON string into a byte. Throws an ArgumentNullException
+		/// if the string is <c>null</c>. Throws a CastException if the node does
+		/// not contain a byte.
+		/// </summary>
+		public byte DeserializeToByte (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToByte (node, options);
 		}
 
 		/// <summary>
@@ -226,6 +406,22 @@ namespace UnityJSON
 		}
 
 		/// <summary>
+		/// Deserializes a JSON string into a boolean. Throws an ArgumentNullException
+		/// if the string is <c>null</c>. Throws a CastException if the node does
+		/// not contain a boolean.
+		/// </summary>
+		public bool DeserializeToBool (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToBool (node, options);
+		}
+
+		/// <summary>
 		/// Deserializes a JSON node into a boolean. Throws an ArgumentNullException
 		/// if the node is <c>null</c>. Throws a CastException if the node does
 		/// not contain a boolean.
@@ -238,6 +434,22 @@ namespace UnityJSON
 				throw new ArgumentNullException ("node");
 			}
 			return (bool)_DeserializeToBool (node, options);
+		}
+
+		/// <summary>
+		/// Deserializes a JSON string into a float. Throws an ArgumentNullException
+		/// if the string is <c>null</c>. Throws a CastException if the node does
+		/// not contain a float.
+		/// </summary>
+		public float DeserializeToFloat (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToFloat (node, options);
 		}
 
 		/// <summary>
@@ -256,6 +468,22 @@ namespace UnityJSON
 		}
 
 		/// <summary>
+		/// Deserializes a JSON string into a double. Throws an ArgumentNullException
+		/// if the string is <c>null</c>. Throws a CastException if the node does
+		/// not contain a double.
+		/// </summary>
+		public double DeserializeToDouble (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToDouble (node, options);
+		}
+
+		/// <summary>
 		/// Deserializes a JSON node into a double. Throws an ArgumentNullException
 		/// if the node is <c>null</c>. Throws a CastException if the node does
 		/// not contain a double.
@@ -268,6 +496,22 @@ namespace UnityJSON
 				throw new ArgumentNullException ("node");
 			}
 			return (double)_DeserializeToDouble (node, options);
+		}
+
+		/// <summary>
+		/// Deserializes a JSON string into a long. Throws an ArgumentNullException
+		/// if the string is <c>null</c>. Throws a CastException if the node does
+		/// not contain a long.
+		/// </summary>
+		public long DeserializeToLong (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToLong (node, options);
 		}
 
 		/// <summary>
@@ -286,16 +530,50 @@ namespace UnityJSON
 		}
 
 		/// <summary>
+		/// Deserializes a JSON string into a string. Throws an ArgumentNullException
+		/// if the node is <c>null</c>.
+		/// </summary>
+		public string DeserializeToString (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToString (node, options);
+		}
+
+		/// <summary>
 		/// Deserializes a JSON node into a string.
 		/// </summary>
 		public string DeserializeToString (
 			JSONNode node,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (node == null || node.IsNull) {
+			if (node == null) {
+				throw new ArgumentNullException ("node");
+			}
+			if (node.IsNull || node.Tag == JSONNodeType.None) {
 				return null;
 			}
 			return _DeserializeToString (node, options);
+		}
+
+		/// <summary>
+		/// Deserializes a JSON string into an enum. Throws an ArgumentNullException
+		/// if the string is <c>null</c>. Throws an ArgumentException if the generic
+		/// type T is not an enum.
+		/// </summary>
+		public T DeserializeToEnum<T> (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToEnum<T> (node, options);
 		}
 
 		/// <summary>
@@ -307,7 +585,7 @@ namespace UnityJSON
 			JSONNode node,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (node == null || node.IsNull) {
+			if (node == null) {
 				throw new ArgumentNullException ("node");
 			}
 			if (!typeof(T).IsEnum) {
@@ -317,18 +595,59 @@ namespace UnityJSON
 		}
 
 		/// <summary>
+		/// Deserializes a JSON string into a generic list.
+		/// </summary>
+		public List<T> DeserializeToList<T> (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToList<T> (node, options);
+		}
+
+		/// <summary>
 		/// Deserializes a JSON node into a generic list.
 		/// </summary>
 		public List<T> DeserializeToList<T> (
 			JSONNode node,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (node == null || node.IsNull) {
+			if (node == null) {
+				throw new ArgumentNullException ("node");
+			}
+			if (node.IsNull || node.Tag == JSONNodeType.None) {
 				return null;
 			}
 			var list = new List<T> ();
 			_FeedList (list, node, typeof(T), options);
 			return list;
+		}
+
+		/// <summary>
+		/// Deserializes a JSON string into a System.Object list. If no restrictions
+		/// are given, the deserialized types can be doubles, booleans, strings, and arrays
+		/// and dictionaries thereof. Restricted types can allow custom types to create
+		/// classes or structs instead of dictionaries.
+		/// </summary>
+		/// <param name="jsonString">JSON string to deserialize.</param>
+		/// <param name="restrictedTypes">Restricted types for the object.</param>
+		/// <param name="customTypes">Allowed custom types for the object. Restrictions
+		/// must allow custom types if not <c>null</c>.</param>
+		/// <param name="options">Deserialization options.</param>
+		public List<object> DeserializeToObjectList (
+			string jsonString,
+			ObjectTypes restrictedTypes = ObjectTypes.JSON,
+			Type[] customTypes = null,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToObjectList (node, restrictedTypes, customTypes, options);
 		}
 
 		/// <summary>
@@ -348,12 +667,29 @@ namespace UnityJSON
 			Type[] customTypes = null,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (node == null || node.IsNull) {
+			if (node == null) {
+				throw new ArgumentNullException ("node");
+			}
+			if (node.IsNull || node.Tag == JSONNodeType.None) {
 				return null;
 			}
 			var list = new List<object> ();
 			_FeedList (list, node, typeof(object), options, restrictedTypes, customTypes);
 			return list;
+		}
+
+		/// <summary>
+		/// Deserializes a JSON string into a generic dictionary.
+		/// </summary>
+		public Dictionary<K, V> DeserializeToDictionary<K, V> (
+			string jsonString,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToDictionary<K, V> (node, options);
 		}
 
 		/// <summary>
@@ -363,12 +699,43 @@ namespace UnityJSON
 			JSONNode node,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (node == null || node.IsNull) {
+			if (node == null) {
+				throw new ArgumentNullException ("node");
+			}
+			if (node.IsNull || node.Tag == JSONNodeType.None) {
 				return null;
 			}
 			var dictionary = new Dictionary<K, V> ();
 			_FeedDictionary (dictionary, node, typeof(K), typeof(V), options);
 			return dictionary;
+		}
+
+		/// <summary>
+		/// Deserializes a JSON string into a dictionary with value type System.Object. If 
+		/// no restrictions are given, the deserialized value types can be doubles, booleans, 
+		/// strings, and arrays and dictionaries thereof. Restricted types can allow custom 
+		/// types to create classes or structs instead of dictionaries.
+		/// </summary>
+		/// <param name="jsonString">JSON string to deserialize.</param>
+		/// <param name="restrictedTypes">Restricted types for the values.</param>
+		/// <param name="customTypes">Allowed custom types for the values. Restrictions
+		/// must allow custom types if not <c>null</c>.</param>
+		/// <param name="options">Deserialization options.</param>
+		public Dictionary<K, object> DeserializeToObjectDictionary<K> (
+			string jsonString,
+			ObjectTypes restrictedTypes = ObjectTypes.JSON,
+			Type[] customTypes = null,
+			NodeOptions options = NodeOptions.Default)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			return DeserializeToObjectDictionary<K> (
+				node, 
+				restrictedTypes, 
+				customTypes, 
+				options);
 		}
 
 		/// <summary>
@@ -388,7 +755,10 @@ namespace UnityJSON
 			Type[] customTypes = null,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (node == null || node.IsNull) {
+			if (node == null) {
+				throw new ArgumentNullException ("node");
+			}
+			if (node.IsNull || node.Tag == JSONNodeType.None) {
 				return null;
 			}
 			var dictionary = new Dictionary<K, object> ();
@@ -403,45 +773,39 @@ namespace UnityJSON
 			return dictionary;
 		}
 
-		private object _Deserialize (
+		internal object Deserialize (
 			JSONNode node, 
-			Type type, 
+			Type targetType, 
 			NodeOptions options, 
-			ObjectTypes types,
+			ObjectTypes restrictedTypes,
 			Type[] customTypes)
 		{
-			if (node == null || node.IsNull) {
+			if (node.IsNull || node.Tag == JSONNodeType.None) {
 				return null;
 			}
 
-			object obj;
-			if (TryInstantiate (node, type, options, out obj)) {
-				DeserializeOn (obj, node, options);
-				return obj;
+			if (targetType == typeof(object)) {
+				return _DeserializeToObject (node, options, restrictedTypes, customTypes);
 			}
 
-			if (type == typeof(object)) {
-				return _DeserializeToObject (node, options, types, customTypes);
-			}
-
-			if (type.IsValueType) {
-				if (type.IsEnum) {
-					return _DeserializeToEnum (node, type, options);
-				} else if (type.IsPrimitive) {
-					return _DeserializeToPrimitive (node, type, options);
+			if (targetType.IsValueType) {
+				if (targetType.IsEnum) {
+					return _DeserializeToEnum (node, targetType, options);
+				} else if (targetType.IsPrimitive) {
+					return _DeserializeToPrimitive (node, targetType, options);
 				}
 			} else {
-				if (type == typeof(string)) {
+				if (targetType == typeof(string)) {
 					return _DeserializeToString (node, options);
-				} else if (Nullable.GetUnderlyingType (type) != null) {
-					return _DeserializeToNullable (node, type, options);
-				} else if (typeof(IList).IsAssignableFrom (type)) {
-					return _DeserializeToIList (node, type, options, types, customTypes);
-				} else if (Util.IsDictionary (type)) {
-					return _DeserializeToIDictionary (node, type, options, types, customTypes);
+				} else if (Nullable.GetUnderlyingType (targetType) != null) {
+					return _DeserializeToNullable (node, targetType, options);
+				} else if (typeof(IList).IsAssignableFrom (targetType)) {
+					return _DeserializeToIList (node, targetType, options, restrictedTypes, customTypes);
+				} else if (Util.IsDictionary (targetType)) {
+					return _DeserializeToIDictionary (node, targetType, options, restrictedTypes, customTypes);
 				}
 			}
-			return _DeserializeCustom (node, type, options);
+			return _DeserializeToCustom (node, targetType, options);
 		}
 
 		private object _Deserialize (
@@ -454,7 +818,7 @@ namespace UnityJSON
 				? null : Util.GetAttribute<RestrictTypeAttribute> (memberInfo);
 			ObjectTypes types = typeAttribute == null ? ObjectTypes.JSON : typeAttribute.types;
 			Type[] customTypes = typeAttribute == null ? null : typeAttribute.customTypes;
-			return _Deserialize (node, type, options, types, customTypes);
+			return Deserialize (node, type, options, types, customTypes);
 		}
 
 		private object _DeserializeToObject (
@@ -512,7 +876,7 @@ namespace UnityJSON
 				}
 				return _DeserializeToString (node, options);
 			} else {
-				return _HandleUnknown (options, "Unknown JSON node type " + node);
+				return null;
 			}
 		}
 
@@ -529,7 +893,7 @@ namespace UnityJSON
 			} else if (type == typeof(byte)) {
 				return _DeserializeToByte (node, options);
 			} else if (type == typeof(long)) {
-				return _DeserializeToByte (node, options);
+				return _DeserializeToLong (node, options);
 			} else if (type == typeof(uint)) {
 				return _DeserializeToUInt (node, options);
 			} else if (type == typeof(bool)) {
@@ -774,7 +1138,7 @@ namespace UnityJSON
 				while (enumerator.MoveNext ()) {
 					JSONNode child = (JSONNode)enumerator.Current;
 					// Throws an error if needed.
-					list.Add (_Deserialize (
+					list.Add (Deserialize (
 						child, 
 						genericArgument, 
 						options & ~NodeOptions.ReplaceDeserialized,
@@ -816,7 +1180,7 @@ namespace UnityJSON
 				while (enumerator.MoveNext ()) {
 					var pair = (KeyValuePair<string, JSONNode>)enumerator.Current;
 					// Use default field options to throw at any error.
-					object key = _Deserialize (
+					object key = Deserialize (
 						             new JSONString (pair.Key), 
 						             keyType, 
 						             NodeOptions.Default,
@@ -824,7 +1188,7 @@ namespace UnityJSON
 						             null /* customTypes */);
 
 					// Throws an error if needed.
-					object value = _Deserialize (
+					object value = Deserialize (
 						               pair.Value, 
 						               valueType, 
 						               options & ~NodeOptions.ReplaceDeserialized,
@@ -837,108 +1201,63 @@ namespace UnityJSON
 			}
 		}
 
-		private object _DeserializeCustom (JSONNode node, Type type, NodeOptions options)
+		private object _DeserializeToCustom (JSONNode node, Type targetType, NodeOptions options)
 		{
-			var conditionalAttributes = type.GetCustomAttributes (typeof(ConditionalInstantiationAttribute), false);
-			foreach (object attribute in conditionalAttributes) {
-				var condition = attribute as ConditionalInstantiationAttribute;
-				if (Equals (node [condition.key].Value, condition.value.ToString ())) {
-					JSONNode value = node [condition.key];
-					if (condition.removeKey) {
-						node.Remove (condition.key);
-					}
-					object result = Deserialize (node, condition.referenceType, options);
-					if (condition.removeKey) {
-						node.Add (condition.key, value);
-					}
-					return result;
-				}
-			}
-
-			var defaultAttribute = Util.GetAttribute<DefaultInstantiationAttribute> (type);
-			if (defaultAttribute != null) {
-				return Deserialize (node, defaultAttribute.referenceType, options);
-			}
-
-			object obj = null;
-			KeyValuePair<string, JSONNode>[] removedKeys = null;
-			ConstructorInfo[] constructors = type.GetConstructors (
-				                                 BindingFlags.Instance |
-				                                 BindingFlags.Public |
-				                                 BindingFlags.NonPublic);
-			foreach (ConstructorInfo constructor in constructors) {
-				var constructorAttribute = Util.GetAttribute<JSONConstructorAttribute> (constructor);
-				if (constructorAttribute != null) {
-					obj = _CreateObjectWithConstructor (type, constructor, node, out removedKeys);
-					break;
-				}
-			}
-
-			if (obj == null) {
-				try {
-					obj = Activator.CreateInstance (type);
-				} catch (Exception) {
-					return _HandleUnknown (options, "Unknown type " + type + " cannot be instantiated.");
-				}
-			}
+			InstantiationData instantiationData = instantiater.Instantiate (
+				                                      node,
+				                                      targetType,
+				                                      null /* referingType */,
+				                                      options,
+				                                      this);
 				
-			DeserializeOn (obj, node, options);
-			if (removedKeys != null) {
-				foreach (var pair in removedKeys) {
-					node.Add (pair.Key, pair.Value);
-				}
+			if (!instantiationData.needsDeserialization) {
+				return instantiationData.instantiatedObject;
 			}
-			return obj;
+			_DeserializeOn (
+				instantiationData.instantiatedObject,
+				node,
+				options,
+				instantiationData.ignoredKeys);
+			return instantiationData.instantiatedObject;
 		}
 
-		private object _CreateObjectWithConstructor (
-			Type type,
-			ConstructorInfo constructor, 
+		private void _DeserializeOn (
+			object obj, 
 			JSONNode node,
-			out KeyValuePair<string, JSONNode>[] removedKeys)
+			NodeOptions options,
+			HashSet<string> ignoredKeys)
 		{
-			ParameterInfo[] parameters = constructor.GetParameters ();
-			object[] parameterValues = new object[parameters.Length];
-			removedKeys = new KeyValuePair<string, JSONNode>[parameterValues.Length];
-
-			for (int i = 0; i < parameterValues.Length; i++) {
-				var parameterAttribute = Util.GetAttribute<JSONNodeAttribute> (parameters [i]);
-				string key = parameterAttribute != null && parameterAttribute.key != null
-					? parameterAttribute.key : parameters [i].Name;
-				parameterValues [i] = Deserialize (
-					node [key], 
-					parameters [i].ParameterType, 
-					parameterAttribute == null ? NodeOptions.Default : parameterAttribute.options);
-
-				removedKeys [i] = new KeyValuePair<string, JSONNode> (key, node [key]);
-				node.Remove (key);
-			}
-			return Activator.CreateInstance (type, parameterValues);
-		}
-
-		private void _FeedCustom (object filledObject, JSONNode node, NodeOptions options)
-		{
-			if (filledObject is IDeserializable) {
-				(filledObject as IDeserializable).Deserialize (node, this);
+			if (TryDeserializeOn (obj, node, options, ignoredKeys)) {
 				return;
 			}
+			if (obj is IDeserializable) {
+				(obj as IDeserializable).Deserialize (node, this);
+				return;
+			}
+			_DeserializeByParts (obj, node, options, ignoredKeys);
+		}
 
-			var listener = filledObject as IDeserializationListener;
+		private void _DeserializeByParts (
+			object obj, 
+			JSONNode node,
+			NodeOptions options,
+			HashSet<string> ignoredKeys)
+		{
+			var listener = obj as IDeserializationListener;
 			if (listener != null) {
 				listener.OnDeserializationWillBegin (this);
 			}
 
 			if (node.IsObject) {
 				try {
-					Type type = filledObject.GetType ();
+					Type type = obj.GetType ();
 
 					MemberInfo extrasMember = null;
 					JSONExtrasAttribute extrasAttribute = null;
 					Dictionary<string, object> extras = new Dictionary<string, object> ();
 
 					var members = _GetDeserializedClassMembers (type, out extrasMember, out extrasAttribute);
-					JSONObject obj = node as JSONObject;
-					IEnumerator enumerator = obj.GetEnumerator ();
+					IEnumerator enumerator = (node as JSONObject).GetEnumerator ();
 
 					var extrasTypeAttribute = extrasMember == null 
 						? null : Util.GetAttribute<RestrictTypeAttribute> (extrasMember);
@@ -949,8 +1268,12 @@ namespace UnityJSON
 
 					while (enumerator.MoveNext ()) {
 						var pair = (KeyValuePair<string, JSONNode>)enumerator.Current;
+						if (ignoredKeys.Contains (pair.Key)) {
+							continue;
+						}
+
 						if (members.ContainsKey (pair.Key)) {
-							_DeserializeClassMember (filledObject, members [pair.Key], pair.Value);
+							_DeserializeClassMember (obj, members [pair.Key], pair.Value);
 						} else {
 							if (extrasMember != null) {
 								extras.Add (pair.Key, _DeserializeToObject (
@@ -971,7 +1294,7 @@ namespace UnityJSON
 
 					if (extrasMember != null) {
 						if (extras.Count != 0 || extrasAttribute.options.ShouldAssignNull ()) {
-							Util.SetMemberValue (extrasMember, filledObject, extras);
+							Util.SetMemberValue (extrasMember, obj, extras);
 						}
 					}
 
@@ -983,6 +1306,10 @@ namespace UnityJSON
 						listener.OnDeserializationFailed (this);
 					}
 					throw exception;
+				}
+			} else if (node.IsNull || node.Tag == JSONNodeType.None) {
+				if (listener != null) {
+					listener.OnDeserializationSucceeded (this);
 				}
 			} else {
 				if (listener != null) {
@@ -1010,7 +1337,7 @@ namespace UnityJSON
 					    && !options.ShouldReplaceWithDeserialized ()) {
 						var value = Util.GetMemberValue (memberInfo, filledObject);
 						if (value != null) {
-							DeserializeOn (value, node, options);
+							_DeserializeOn (value, node, options, new HashSet<string> ());
 							return;
 						}
 					}

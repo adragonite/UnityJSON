@@ -172,7 +172,10 @@ namespace UnityJSON
 	/// list/array of objects or a dictionary with value type object. For dictionaries,
 	/// the restriction is only applied to the value type.
 	/// </summary>
-	[AttributeUsage (AttributeTargets.Field | AttributeTargets.Property)]
+	[AttributeUsage (
+		AttributeTargets.Field |
+		AttributeTargets.Property |
+		AttributeTargets.Parameter)]
 	public class RestrictTypeAttribute : Attribute
 	{
 		private ObjectTypes _types;
@@ -183,10 +186,30 @@ namespace UnityJSON
 			_types = types;
 		}
 
-		public RestrictTypeAttribute (ObjectTypes types, Type[] customTypes) : base ()
+		public RestrictTypeAttribute (ObjectTypes types, params Type[] customTypes) : base ()
 		{
 			if (customTypes == null) {
 				throw new ArgumentNullException ("customTypes");
+			}
+			_types = types;
+
+			if (!_types.SupportsCustom ()) {
+				throw new ArgumentException ("Attribute does not support custom types.");
+			}
+
+			List<Type> typeList = new List<Type> ();
+			HashSet<Type> typeSet = new HashSet<Type> ();
+			foreach (Type type in customTypes) {
+				if (type != null
+				    && !typeSet.Contains (type)
+				    && Util.IsCustomType (type)) {
+					typeSet.Add (type);
+					typeList.Add (type);
+				}
+			}
+
+			if (typeList.Count != 0) {
+				_customTypes = typeList.ToArray ();
 			}
 		}
 
@@ -205,26 +228,6 @@ namespace UnityJSON
 		/// </summary>
 		public Type[] customTypes {
 			get { return _customTypes; }
-			set {
-				if (!_types.SupportsCustom ()) {
-					throw new ArgumentException ("Attribute does not support custom types.");
-				}
-
-				List<Type> typeList = new List<Type> ();
-				HashSet<Type> typeSet = new HashSet<Type> ();
-				foreach (Type type in value) {
-					if (type != null
-					    && !typeSet.Contains (type)
-					    && Util.IsCustomType (type)) {
-						typeSet.Add (type);
-						typeList.Add (type);
-					}
-				}
-
-				if (typeList.Count != 0) {
-					_customTypes = typeList.ToArray ();
-				}
-			}
 		}
 	}
 
@@ -293,7 +296,7 @@ namespace UnityJSON
 		/// contain any data for the class / struct in order to
 		/// prevent any unknown key errors.
 		/// </summary>
-		public bool removeKey { get; set; }
+		public bool ignoreConditionKey { get; set; }
 	}
 
 	/// <summary>

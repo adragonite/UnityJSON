@@ -18,8 +18,7 @@ namespace UnityJSON
 		private const string _kTrue = "true";
 		private const string _kFalse = "false";
 
-		private static Serializer _default = new Serializer ();
-		private static Serializer _simple = _default;
+		private static Serializer _default = new Serializer();
 
 		/// <summary>
 		/// The default serializer to be used when no serializer is given.
@@ -32,16 +31,14 @@ namespace UnityJSON
 				if (value == null) {
 					throw new ArgumentNullException ("default serializer");
 				}
-				_simple = value;
+				_default = value;
 			}
 		}
 
 		/// <summary>
 		/// The initial serializer that is provided by the framework.
 		/// </summary>
-		public static Serializer Simple {
-			get { return _simple; }
-		}
+		private static readonly Serializer Simple = new Serializer ();
 
 		/// <summary>
 		/// When set to true, the keyword undefined is used instead of null
@@ -77,6 +74,9 @@ namespace UnityJSON
 		/// then ISerializable.Serialize method if the object implements it.
 		/// If these are not implemented, then the framework serialization is
 		/// performed.
+		/// 
+		/// This is the general serialization function and an object specific
+		/// function should be prefered when performing manual serialization.
 		/// </summary>
 		public string Serialize (object obj, NodeOptions options = NodeOptions.Default)
 		{
@@ -260,7 +260,7 @@ namespace UnityJSON
 		/// <summary>
 		/// Serializes Unity Rect into JSON string.
 		/// </summary>
-		private string SerializeRect (Rect rect)
+		public string SerializeRect (Rect rect)
 		{
 			return "{\"x\":" + rect.x + ",\"y\":" + rect.y
 			+ ",\"width\":" + rect.width + ",\"height\":" + rect.height + "}";
@@ -269,10 +269,23 @@ namespace UnityJSON
 		/// <summary>
 		/// Serializes Unity Bounds into JSON string.
 		/// </summary>
-		private string SerializeBounds (Bounds bounds)
+		public string SerializeBounds (Bounds bounds)
 		{
 			return "{\"center\":" + SerializeVector3 (bounds.center)
 			+ ",\"extents\":" + SerializeVector3 (bounds.extents) + "}";
+		}
+
+		/// <summary>
+		/// Serializes an object by its fields and properties. This will
+		/// ignore custom serializations of the object (see Serializer.TrySerialize
+		/// and ISerializable.Serialize).
+		/// </summary>
+		public string SerializeByParts (object obj, NodeOptions options = NodeOptions.Default)
+		{
+			if (obj == null) {
+				return SerializeNull (options);
+			}
+			return _SerializeCustom (obj, options);
 		}
 
 		private string _SerializeString (string stringValue)
