@@ -116,7 +116,20 @@
 		/// keys, then an exception is thrown. This option prevents the
 		/// deserializer from throwing that exception.
 		/// </summary>
-		IgnoreUnknownKey = 1 << 2
+		IgnoreUnknownKey = 1 << 2,
+
+		/// <summary>
+		/// The class or the struct is handled as a tuple (JSON array) rather
+		/// than a dictionary. This automatically ignores properties both for
+		/// serialization and deserialization. For serialization, the fields are
+		/// serialized in the order they are defined in an array without keys.
+		/// As for deserialization, the elements are passed to the constructor
+		/// in the order they are defined. Deserialization does not take place
+		/// for other fields and properties.
+		/// 
+		/// Tuple formatted classes and structs do not support JSON extras.
+		/// </summary>
+		TupleFormat = 1 << 3 | IgnoreProperties,
 	}
 
 	/// <summary>
@@ -225,7 +238,7 @@
 		/// </summary>
 		public static bool ShouldSerializeNull (this NodeOptions options)
 		{
-			return (options & NodeOptions.SerializeNull) != 0;
+			return (options & NodeOptions.SerializeNull) == NodeOptions.SerializeNull;
 		}
 
 		/// <summary>
@@ -233,7 +246,7 @@
 		/// </summary>
 		public static bool ShouldIgnoreTypeMismatch (this NodeOptions options)
 		{
-			return (options & NodeOptions.IgnoreTypeMismatch) != 0;
+			return (options & NodeOptions.IgnoreTypeMismatch) == NodeOptions.IgnoreTypeMismatch;
 		}
 
 		/// <summary>
@@ -241,7 +254,7 @@
 		/// </summary>
 		public static bool ShouldIgnoreUnknownType (this NodeOptions options)
 		{
-			return (options & NodeOptions.IgnoreInstantiationError) != 0;
+			return (options & NodeOptions.IgnoreInstantiationError) == NodeOptions.IgnoreInstantiationError;
 		}
 
 		/// <summary>
@@ -257,7 +270,7 @@
 		/// </summary>
 		public static bool ShouldReplaceWithDeserialized (this NodeOptions options)
 		{
-			return (options & NodeOptions.ReplaceDeserialized) != 0;
+			return (options & NodeOptions.ReplaceDeserialized) == NodeOptions.ReplaceDeserialized;
 		}
 
 		/// <summary>
@@ -265,7 +278,7 @@
 		/// </summary>
 		public static bool ShouldIgnoreProperties (this ObjectOptions options)
 		{
-			return (options & ObjectOptions.IgnoreProperties) != 0;
+			return (options & ObjectOptions.IgnoreProperties) == ObjectOptions.IgnoreProperties;
 		}
 
 		/// <summary>
@@ -285,11 +298,19 @@
 		}
 
 		/// <summary>
+		/// Returns <c>true</c> if ObjectOptions.TupleFormat is not set.
+		/// </summary>
+		public static bool ShouldUseTupleFormat (this ObjectOptions options)
+		{
+			return (options & ObjectOptions.TupleFormat) == ObjectOptions.TupleFormat;
+		}
+
+		/// <summary>
 		/// Returns <c>true</c> if ObjectTypes.String is set.
 		/// </summary>
 		public static bool SupportsString (this ObjectTypes types)
 		{
-			return (types & ObjectTypes.String) != 0;
+			return (types & ObjectTypes.String) == ObjectTypes.String;
 		}
 
 		/// <summary>
@@ -297,7 +318,7 @@
 		/// </summary>
 		public static bool SupportsBool (this ObjectTypes types)
 		{
-			return (types & ObjectTypes.Bool) != 0;
+			return (types & ObjectTypes.Bool) == ObjectTypes.Bool;
 		}
 
 		/// <summary>
@@ -305,7 +326,7 @@
 		/// </summary>
 		public static bool SupportsNumber (this ObjectTypes types)
 		{
-			return (types & ObjectTypes.Number) != 0;
+			return (types & ObjectTypes.Number) == ObjectTypes.Number;
 		}
 
 		/// <summary>
@@ -313,7 +334,7 @@
 		/// </summary>
 		public static bool SupportsArray (this ObjectTypes types)
 		{
-			return (types & ObjectTypes.Array) != 0;
+			return (types & ObjectTypes.Array) == ObjectTypes.Array;
 		}
 
 		/// <summary>
@@ -321,7 +342,7 @@
 		/// </summary>
 		public static bool SupportsDictionary (this ObjectTypes types)
 		{
-			return (types & ObjectTypes.Dictionary) != 0;
+			return (types & ObjectTypes.Dictionary) == ObjectTypes.Dictionary;
 		}
 
 		/// <summary>
@@ -329,7 +350,7 @@
 		/// </summary>
 		public static bool SupportsCustom (this ObjectTypes types)
 		{
-			return (types & ObjectTypes.Custom) != 0;
+			return (types & ObjectTypes.Custom) == ObjectTypes.Custom;
 		}
 	}
 }

@@ -65,6 +65,10 @@ namespace UnityJSON
 			}
 		}
 
+		protected Deserializer ()
+		{
+		}
+
 		/// <summary>
 		/// Tries to deserialize the JSON node onto the given object. It is guaranteed
 		/// that the object is not null. This will be called before trying any other
@@ -1360,12 +1364,17 @@ namespace UnityJSON
 			out MemberInfo extrasMember,
 			out JSONExtrasAttribute extrasAttribute)
 		{
-			JSONObjectAttribute classAttribute = Util.GetAttribute<JSONObjectAttribute> (classType);
+			JSONObjectAttribute objectAttribute = Util.GetAttribute<JSONObjectAttribute> (classType);
 			Dictionary<string, List<MemberInfo>> members = new Dictionary<string, List<MemberInfo>> ();
 
 			var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-			if (classAttribute != null && !classAttribute.options.ShouldIgnoreStatic ()) {
-				flags |= BindingFlags.Static;
+			if (objectAttribute != null) {
+				if (!objectAttribute.options.ShouldIgnoreStatic ()) {
+					flags |= BindingFlags.Static;
+				}
+				if (objectAttribute.options.ShouldUseTupleFormat ()) {
+					throw new ArgumentException ("Cannot deserialize on a tuple formatted object.");
+				}
 			}
 
 			extrasMember = null;
@@ -1392,7 +1401,7 @@ namespace UnityJSON
 				}
 			}
 
-			if (classAttribute == null || !classAttribute.options.ShouldIgnoreProperties ()) {
+			if (objectAttribute == null || !objectAttribute.options.ShouldIgnoreProperties ()) {
 				foreach (var propertyInfo in classType.GetProperties(flags)) {
 					if (extrasMember == null) {
 						if (Util.IsJSONExtrasMember (propertyInfo, out extrasAttribute)) {

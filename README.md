@@ -7,7 +7,6 @@
 * [Features](#features)
 * [Installation](#installation)
 * [Serialization](#serialization)
-  - [Enums](#enums)
   - [Serialization Lifecycle](#serialization-lifecycle)
   - [Custom Serialization with Serializer](#custom-serialization-with-serializer)
   - [Custom Serialization with ISerializable](#custom-serialization-with-iserializable)
@@ -20,6 +19,9 @@
   - [Custom Deserialization with Instantiater](#custom-deserialization-with-instantiater)
   - [Custom Deserialization with Deserializer](#custom-deserialization-with-deserializer)
   - [Custom Deserialization with IDeserializable](#custom-deserialization-with-ideserializable)
+* [Special Types](#special-types)
+  - [Enums](#enums)
+  - [Tuples](#tuples)
 * [Changelog](#changelog)
   - [v2.0](#v20)
   - [v1.1](#v11)
@@ -125,28 +127,8 @@ at. It uses the `ObjectOptions` enum which has the following serialization optio
 
 - IgnoreProperties: Ignores all properties from serialization / deserialization.
 - IncludeStatic: Includes static fields and properties in serialization / deserialization.
-
-### Enums
-
-Enums are by default serialized directly with their member names. Their serialization
-can, however, be customized with the use of `JSONEnumAttribute`. The attribute allows the
-following formating options:
-
-- useIntegers: The enums are serialized / deserialized according to their numeric values.
-- format: Optional formatting to be applied given in the form of `JSONEnumMemberFormating`.
-It supports lowercase, uppercase or captialize (only the first letter is captialized).
-- prefix: Adds an optional prefix to the formatted member name.
-- suffix: Adds an optional suffix to the formatted member name.
-
-```cs
-[JSONEnum(format = JSONEnumMemberFormating.Lowercased, suffix = "Position")]
-public enum Positions
-{
-    Forward
-}
-
-JSON.Serialize(Positions.Forward) // forwardPosition
-```
+- TupleFormat: Handles the struct or the class as a tuple of fields. See [Tuples](#tuples)
+for more detail.
 
 ### Serialization Lifecycle
 
@@ -643,19 +625,87 @@ public class AClass : IDeserializable
 The classes that are deserialized with the `IDeserializable.Deserialize` method do 
 not receive deserialization lifecycle calls from `IDeserializationListener`.
 
+## Special Types
+
+### Enums
+
+Enums are by default serialized and deserialized directly with their member names. This process
+can, however, be customized with the use of `JSONEnumAttribute`. The attribute allows the
+following formating options:
+
+- useIntegers: The enums are serialized / deserialized according to their numeric values.
+- format: Optional formatting to be applied given in the form of `JSONEnumMemberFormating`.
+It supports lowercase, uppercase or captialize (only the first letter is captialized).
+- prefix: Adds an optional prefix to the formatted member name.
+- suffix: Adds an optional suffix to the formatted member name.
+
+```cs
+[JSONEnum(format = JSONEnumMemberFormating.Lowercased, suffix = "Position")]
+public enum Positions
+{
+    Forward
+}
+
+JSON.Serialize(Positions.Forward) // forwardPosition
+JSON.DeserializeEnum<Positions>("forwardPosition") // Positions.Forward
+```
+
+### Tuples
+
+Classes and structs can also be serialized and deserialized as tuples (JSON arrays). This
+is performed by adding the `ObjectOptions.TupleFormat` to a `JSONObjectAttribute` at
+the class / struct declaration. Tuple formatted classes and structs always ignore properties.
+When serialized, the fields are serialized in an array in the order they are declared.
+When deserialized, the class / struct MUST provide a constructor with the 
+`JSONConstructorAttribute` where the arguments are passed directly from the array.
+
+```cs
+[JSONObject(ObjectOptions.TupleFormat)]
+public class Tuple<T1, T2>
+{
+    [JSONNode(NodeOptions.SerializeNull)]
+    public T1 item1;
+
+    [JSONNode(NodeOptions.SerializeNull)]
+    public T2 item2;
+
+    [JSONConstructor]
+    public Tuple(T1 item1, T2 item2)
+    {
+        this.item1 = item1;
+        this.item2 = item2;
+    }
+}
+
+var tuple = new Tuple<int, string>(2, "value");
+tuple.ToJSONString(); // [2, "value"]
+
+var obj = JSON.Deserialize<Tuple<IList, Tuple<float, float>>>(
+    "[[\"this\",\"is\",\"IList\"], [3.14, 2.17]]");
+```
+
+Please notice that tuple deserialization takes place at the instantiation and therefore
+cannot be used together with `Deserializer.DeserializeOn`.
+
+UnityJSON does not use C# tuples because Unity3D does not have support for them yet.
+
 ## Changelog
+
+### v2.1
+
+- Provides Tuple support
 
 ### v2.0
 
 - Bug fixes
-- Added Serializer.SerializeByParts
-- Added Deserializer.DeserializeByParts and deserializer methods taking JSON
+- Adds Serializer.SerializeByParts
+- Adds Deserializer.DeserializeByParts and deserializer methods taking JSON
 string arguments
-- Created the class Instantiater
+- Creates the class Instantiater
 - Allows use of RestrictTypeAttribute with constructor arguments
 - Introduces InstantiationData to work around ignored keys
 
 ### v1.1
 
-- Added `JSONConstructorAttribute`
-- Fixed conditional instantiation bug: JSONNode kept the same after key removal
+- Adds `JSONConstructorAttribute`
+- Fixes conditional instantiation bug: JSONNode kept the same after key removal

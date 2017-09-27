@@ -18,7 +18,7 @@ namespace UnityJSON
 		private const string _kTrue = "true";
 		private const string _kFalse = "false";
 
-		private static Serializer _default = new Serializer();
+		private static Serializer _default = new Serializer ();
 
 		/// <summary>
 		/// The default serializer to be used when no serializer is given.
@@ -46,7 +46,7 @@ namespace UnityJSON
 		/// </summary>
 		public bool useUndefinedForNull = false;
 
-		private Serializer ()
+		protected Serializer ()
 		{
 		}
 
@@ -278,13 +278,19 @@ namespace UnityJSON
 		/// <summary>
 		/// Serializes an object by its fields and properties. This will
 		/// ignore custom serializations of the object (see Serializer.TrySerialize
-		/// and ISerializable.Serialize).
+		/// and ISerializable.Serialize). This will throw an argument exception if
+		/// the object is a non-struct value type (primitives and enums).
 		/// </summary>
 		public string SerializeByParts (object obj, NodeOptions options = NodeOptions.Default)
 		{
 			if (obj == null) {
 				return SerializeNull (options);
 			}
+			Type type = obj.GetType ();
+			if (type.IsPrimitive || type.IsEnum) {
+				throw new ArgumentException ("Cannot serialize non-struct value types by parts.");
+			}
+
 			return _SerializeCustom (obj, options);
 		}
 
@@ -382,29 +388,35 @@ namespace UnityJSON
 				};
 
 				Type type = obj.GetType ();
-				JSONObjectAttribute classAttribute = Util.GetAttribute<JSONObjectAttribute> (type);
+				JSONObjectAttribute objectAttribute = Util.GetAttribute<JSONObjectAttribute> (type);
 				var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-				if (classAttribute != null && !classAttribute.options.ShouldIgnoreStatic ()) {
-					flags |= BindingFlags.Static;
+				bool useTupleFormat = false;
+				if (objectAttribute != null) {
+					if (!objectAttribute.options.ShouldIgnoreStatic ()) {
+						flags |= BindingFlags.Static;
+					}
+					if (objectAttribute.options.ShouldUseTupleFormat ()) {
+						useTupleFormat = true;
+					}
 				}
 
 				enumerable = enumerable.Concat (
 					from f in type.GetFields (flags)
 					where isNotExtras (f) && _IsValidFieldInfo (f)
-					select _SerializeCustomField (obj, f));
+					select _SerializeCustomField (obj, f, useTupleFormat));
 
-				if (classAttribute == null || !classAttribute.options.ShouldIgnoreProperties ()) {
+				if (objectAttribute == null || !objectAttribute.options.ShouldIgnoreProperties ()) {
 					enumerable = enumerable.Concat (
 						from p in type.GetProperties (flags)
 						where isNotExtras (p) && _IsValidPropertyInfo (p)
-						select _SerializeCustomProperty (obj, p));
+						select _SerializeCustomProperty (obj, p, useTupleFormat));
 				}
 
 				// Serialize all properties and fields.
 				var result = _Join (enumerable, o => o as string);
 
 				// Serialize the extras if there are any.
-				if (extrasMember != null) {
+				if (!useTupleFormat && extrasMember != null) {
 					var extras = Util.GetMemberValue (extrasMember, obj) as IEnumerable;
 					if (extras != null) {
 						result += (result == "" ? "" : ",")
@@ -415,8 +427,12 @@ namespace UnityJSON
 				if (listener != null) {
 					listener.OnSerializationSucceeded (this);
 				}
-				return  "{" + result + "}";
-				;
+
+				if (useTupleFormat) {
+					return  "[" + result + "]";
+				} else {
+					return  "{" + result + "}";
+				}
 			} catch (Exception exception) {
 				if (listener != null) {
 					listener.OnSerializationFailed (this);
@@ -471,17 +487,17 @@ namespace UnityJSON
 			return result;
 		}
 
-		private string _SerializeCustomField (object obj, FieldInfo fieldInfo)
+		private string _SerializeCustomField (object obj, FieldInfo fieldInfo, bool useTupleFormat)
 		{
-			return _SerializeCustomMember (fieldInfo, fieldInfo.GetValue (obj));
+			return _SerializeCustomMember (fieldInfo, fieldInfo.GetValue (obj), useTupleFormat);
 		}
 
-		private string _SerializeCustomProperty (object obj, PropertyInfo propertyInfo)
+		private string _SerializeCustomProperty (object obj, PropertyInfo propertyInfo, bool useTupleFormat)
 		{
-			return _SerializeCustomMember (propertyInfo, propertyInfo.GetValue (obj, null));
+			return _SerializeCustomMember (propertyInfo, propertyInfo.GetValue (obj, null), useTupleFormat);
 		}
 
-		private string _SerializeCustomMember (MemberInfo keyMemberInfo, object value)
+		private string _SerializeCustomMember (MemberInfo keyMemberInfo, object value, bool useTupleFormat)
 		{
 			JSONNodeAttribute attribute = Util.GetAttribute<JSONNodeAttribute> (keyMemberInfo);
 			NodeOptions options = attribute == null ? NodeOptions.Default : attribute.options;
@@ -491,6 +507,9 @@ namespace UnityJSON
 				
 			string valueString = Serialize (value, options);
 			if (valueString != null || options.ShouldSerializeNull ()) {
+				if (useTupleFormat) {
+					return valueString == null ? _kUndefined : valueString;
+				}
 				string key = (attribute != null && attribute.key != null) ? attribute.key : keyMemberInfo.Name;
 				return _SerializeString (key) + ":" + (valueString == null ? _kUndefined : valueString);
 			} else {

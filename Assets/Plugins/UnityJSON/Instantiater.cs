@@ -75,6 +75,10 @@ namespace UnityJSON
 	{
 		public static readonly Instantiater Default = new Instantiater ();
 
+		protected Instantiater ()
+		{
+		}
+
 		/// <summary>
 		/// Instantiates an instance of a type. First, TryInstantiate method is
 		/// called for custom instantiation. If that fails, then the class is queried for
@@ -252,22 +256,28 @@ namespace UnityJSON
 				return instantiationData;
 			}
 
+			if (node.IsNull || node.Tag == JSONNodeType.None) {
+				return InstantiationData.Null;
+			}
+
 			if (referingType != targetType) {
-				var conditionalAttributes = targetType
-				.GetCustomAttributes (typeof(ConditionalInstantiationAttribute), false);
-				foreach (object attribute in conditionalAttributes) {
-					var condition = attribute as ConditionalInstantiationAttribute;
-					if (Equals (node [condition.key].Value, condition.value.ToString ())) {
-						instantiationData = _Instantiate (
-							node, 
-							condition.referenceType,
-							targetType,
-							options,
-							deserializer);
-						if (condition.ignoreConditionKey) {
-							instantiationData.ignoredKeys = new HashSet<string> () { condition.key };
+				if (node.IsObject) {
+					var conditionalAttributes = targetType
+					.GetCustomAttributes (typeof(ConditionalInstantiationAttribute), false);
+					foreach (object attribute in conditionalAttributes) {
+						var condition = attribute as ConditionalInstantiationAttribute;
+						if (Equals (node [condition.key].Value, condition.value.ToString ())) {
+							instantiationData = _Instantiate (
+								node, 
+								condition.referenceType,
+								targetType,
+								options,
+								deserializer);
+							if (condition.ignoreConditionKey) {
+								instantiationData.ignoredKeys = new HashSet<string> () { condition.key };
+							}
+							return instantiationData;
 						}
-						return instantiationData;
 					}
 				}
 
@@ -295,6 +305,19 @@ namespace UnityJSON
 			NodeOptions options,
 			Deserializer deserializer)
 		{
+			if (node.IsNull || node.Tag == JSONNodeType.None) {
+				return InstantiationData.Null;
+			}
+
+			JSONObjectAttribute objectAttribute = Util.GetAttribute<JSONObjectAttribute> (targetType);
+			bool useTupleFormat = objectAttribute != null 
+				? objectAttribute.options.ShouldUseTupleFormat () : false;
+			if (useTupleFormat && !node.IsArray) {
+				throw new InstantiationException ("Expected JSON array, found " + node.Tag);
+			} else if (!useTupleFormat && !node.IsObject) {
+				throw new InstantiationException ("Expected JSON object, found " + node.Tag);
+			}
+
 			ConstructorInfo[] constructors = targetType.GetConstructors (
 				                                 BindingFlags.Instance |
 				                                 BindingFlags.Public |
@@ -302,12 +325,12 @@ namespace UnityJSON
 			foreach (ConstructorInfo constructorInfo in constructors) {
 				var constructorAttribute = Util.GetAttribute<JSONConstructorAttribute> (constructorInfo);
 				if (constructorAttribute != null) {
-					return _InstantiateWithConstructor (node, constructorInfo, deserializer);
+					return _InstantiateWithConstructor (node, constructorInfo, deserializer, useTupleFormat);
 				}
 			}
 
 			try {
-				InstantiationData instantiationData = new InstantiationData();
+				InstantiationData instantiationData = new InstantiationData ();
 				instantiationData.instantiatedObject = Activator.CreateInstance (targetType);
 				instantiationData.needsDeserialization = node.Count != 0;
 				return instantiationData;
@@ -320,7 +343,8 @@ namespace UnityJSON
 		private InstantiationData _InstantiateWithConstructor (
 			JSONNode node,
 			ConstructorInfo constructorInfo,
-			Deserializer deserializer)
+			Deserializer deserializer,
+			bool useTupleFormat)
 		{
 			ParameterInfo[] parameters = constructorInfo.GetParameters ();
 			object[] parameterValues = new object[parameters.Length];
@@ -332,23 +356,27 @@ namespace UnityJSON
 
 				string key = nodeAttribute != null && nodeAttribute.key != null
 					? nodeAttribute.key : parameters [i].Name;
+				JSONNode parameterNode = useTupleFormat ? node [i] : node [key];
+
 				ObjectTypes restrictedTypes = restrictAttribute == null 
 					? ObjectTypes.JSON : restrictAttribute.types;
 				Type[] customTypes = restrictAttribute == null ? null : restrictAttribute.customTypes;
 
 				parameterValues [i] = deserializer.Deserialize (
-					node [key],
+					parameterNode,
 					parameters [i].ParameterType,
 					nodeAttribute == null ? NodeOptions.Default : nodeAttribute.options,
 					restrictedTypes,
 					customTypes);
 
-				ignoredKeys.Add (key);
+				if (!useTupleFormat) {
+					ignoredKeys.Add (key);
+				}
 			}
 
-			InstantiationData instantiationData = new InstantiationData();
+			InstantiationData instantiationData = new InstantiationData ();
 			instantiationData.instantiatedObject = constructorInfo.Invoke (parameterValues);
-			instantiationData.needsDeserialization = ignoredKeys.Count != node.Count;
+			instantiationData.needsDeserialization = !useTupleFormat && ignoredKeys.Count != node.Count;
 			instantiationData.ignoredKeys = ignoredKeys;
 			return instantiationData;
 		}
