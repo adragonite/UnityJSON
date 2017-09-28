@@ -23,8 +23,6 @@
   - [Enums](#enums)
   - [Tuples](#tuples)
 * [Changelog](#changelog)
-  - [v2.0](#v20)
-  - [v1.1](#v11)
 
 ## Features
 
@@ -691,6 +689,11 @@ UnityJSON does not use C# tuples because Unity3D does not have support for them 
 
 ## Changelog
 
+### v2.2
+
+- Bug fixes
+- Adds generic deserialize methods to `Deserializer`
+
 ### v2.1
 
 - Provides Tuple support
@@ -698,12 +701,12 @@ UnityJSON does not use C# tuples because Unity3D does not have support for them 
 ### v2.0
 
 - Bug fixes
-- Adds Serializer.SerializeByParts
-- Adds Deserializer.DeserializeByParts and deserializer methods taking JSON
+- Adds `Serializer.SerializeByParts`
+- Adds `Deserializer.DeserializeByParts` and deserializer methods taking JSON
 string arguments
-- Creates the class Instantiater
-- Allows use of RestrictTypeAttribute with constructor arguments
-- Introduces InstantiationData to work around ignored keys
+- Creates the class `Instantiater`
+- Allows use of `RestrictTypeAttribute` with constructor arguments
+- Introduces `InstantiationData` to work around ignored keys
 
 ### v1.1
 

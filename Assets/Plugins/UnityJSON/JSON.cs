@@ -93,18 +93,10 @@ namespace UnityJSON
 			NodeOptions options = NodeOptions.Default,
 			Deserializer deserializer = null)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
 			if (deserializer == null) {
 				deserializer = Deserializer.Default;
 			}
-
-			SimpleJSON.JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			if (node == null) {
-				throw new ArgumentException ("Argument is not a valid JSON string: " + jsonString);
-			}
-			return (T)deserializer.Deserialize (node, typeof(T), options);
+			return deserializer.Deserialize<T> (jsonString, options);
 		}
 
 		/// <summary>
@@ -120,18 +112,10 @@ namespace UnityJSON
 			string jsonString,
 			Deserializer deserializer)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
 			if (deserializer == null) {
 				throw new ArgumentNullException ("deserializer");
 			}
-
-			SimpleJSON.JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			if (node == null) {
-				throw new ArgumentException ("Argument is not a valid JSON string: " + jsonString);
-			}
-			return (T)deserializer.Deserialize (node, typeof(T));
+			return deserializer.Deserialize<T> (jsonString);
 		}
 
 		/// <summary>
@@ -149,21 +133,10 @@ namespace UnityJSON
 			NodeOptions options = NodeOptions.Default, 
 			Deserializer deserializer = null)
 		{
-			if (obj == null) {
-				throw new ArgumentNullException ("obj");
-			}
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
 			if (deserializer == null) {
 				deserializer = Deserializer.Default;
 			}
-
-			SimpleJSON.JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			if (node == null) {
-				throw new ArgumentException ("Argument is not a valid JSON string: " + jsonString);
-			}
-			deserializer.DeserializeOn (obj, node, options);
+			deserializer.DeserializeOn (obj, jsonString, options);
 		}
 
 		/// <summary>
@@ -179,21 +152,10 @@ namespace UnityJSON
 			string jsonString, 
 			Deserializer deserializer)
 		{
-			if (obj == null) {
-				throw new ArgumentNullException ("obj");
-			}
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
 			if (deserializer == null) {
 				throw new ArgumentNullException ("deserializer");
 			}
-
-			SimpleJSON.JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			if (node == null) {
-				throw new ArgumentException ("Argument is not a valid JSON string: " + jsonString);
-			}
-			deserializer.DeserializeOn (obj, node);
+			deserializer.DeserializeOn (obj, jsonString);
 		}
 
 		/// <summary>

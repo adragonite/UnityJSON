@@ -189,6 +189,19 @@ namespace UnityJSON
 		}
 
 		/// <summary>
+		/// Deserializes the JSON string to a new object of the requested generic type. This
+		/// will first insantiate an object of the target type. The instantiation
+		/// will use the associated Instantiater for custom types. If an object can be
+		/// instantiated, #DeserializeOn method is used to feed the JSON into the object.
+		/// </summary>
+		/// <param name="jsonString">JSON string to deserialize.</param>
+		/// <param name="options">Deserialization options for the node (optional).</param>
+		public T Deserialize<T> (string jsonString, NodeOptions options = NodeOptions.Default)
+		{
+			return (T)Deserialize (jsonString, typeof(T), options);
+		}
+
+		/// <summary>
 		/// Deserializes the JSON string to a new object of the requested type. This
 		/// will first insantiate an object of the target type. The instantiation
 		/// will use the associated Instantiater for custom types. If an object can be
@@ -202,11 +215,20 @@ namespace UnityJSON
 			Type type, 
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return Deserialize (node, type, options);
+			return Deserialize (_ToJSONNode (jsonString), type, options);
+		}
+
+		/// <summary>
+		/// Deserializes the JSON node to a new object of the requested type. This
+		/// will first insantiate an object of the target type. The instantiation
+		/// will use the associated Instantiater for custom types. If an object can be
+		/// instantiated, #DeserializeOn method is used to feed the JSON into the object.
+		/// </summary>
+		/// <param name="node">JSON node to deserialize.</param>
+		/// <param name="options">Deserialization options for the node (optional).</param>
+		public T Deserialize<T> (JSONNode node, NodeOptions options = NodeOptions.Default)
+		{
+			return (T)Deserialize (node, typeof(T), options);
 		}
 
 		/// <summary>
@@ -246,11 +268,11 @@ namespace UnityJSON
 			Type[] customTypes = null,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToObject (jsonString, restrictedTypes, customTypes, options);
+			return DeserializeToObject (
+				_ToJSONNode (jsonString), 
+				restrictedTypes, 
+				customTypes, 
+				options);
 		}
 
 		/// <summary>
@@ -293,11 +315,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default) where T : struct
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToNullable<T> (node, options);
+			return DeserializeToNullable<T> (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -325,11 +343,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToInt (node, options);
+			return DeserializeToInt (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -356,11 +370,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToUInt (node, options);
+			return DeserializeToUInt (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -387,11 +397,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToByte (node, options);
+			return DeserializeToByte (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -418,11 +424,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToBool (node, options);
+			return DeserializeToBool (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -449,11 +451,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToFloat (node, options);
+			return DeserializeToFloat (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -480,11 +478,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToDouble (node, options);
+			return DeserializeToDouble (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -511,11 +505,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToLong (node, options);
+			return DeserializeToLong (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -541,11 +531,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToString (node, options);
+			return DeserializeToString (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -573,11 +559,7 @@ namespace UnityJSON
 			string jsonString,
 			NodeOptions options = NodeOptions.Default)
 		{
-			if (jsonString == null) {
-				throw new ArgumentNullException ("jsonString");
-			}
-			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
-			return DeserializeToEnum<T> (node, options);
+			return DeserializeToEnum<T> (_ToJSONNode (jsonString), options);
 		}
 
 		/// <summary>
@@ -810,6 +792,33 @@ namespace UnityJSON
 				}
 			}
 			return _DeserializeToCustom (node, targetType, options);
+		}
+
+		private JSONNode _ToJSONNode (string jsonString)
+		{
+			if (jsonString == null) {
+				throw new ArgumentNullException ("jsonString");
+			}
+
+			JSONNode node = SimpleJSON.JSON.Parse (jsonString);
+			if (node != null) {
+				return node;
+			} else {
+				double value;
+				if (jsonString == "true") {
+					return new JSONBool (true);
+				} else if (jsonString == "false") {
+					return new JSONBool (false);
+				} else if (jsonString == "null" || jsonString == "undefined") {
+					return new JSONNull ();
+				} else if (double.TryParse (jsonString, out value)) {
+					return new JSONNumber (value);
+				} else if (jsonString.StartsWith ("\"") && jsonString.EndsWith ("\"")) {
+					return new JSONString (jsonString.Substring (1, jsonString.Length - 2));
+				} else {
+					return new JSONString (jsonString);
+				}
+			}
 		}
 
 		private object _Deserialize (

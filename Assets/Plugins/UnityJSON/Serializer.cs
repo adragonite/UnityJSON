@@ -38,7 +38,7 @@ namespace UnityJSON
 		/// <summary>
 		/// The initial serializer that is provided by the framework.
 		/// </summary>
-		private static readonly Serializer Simple = new Serializer ();
+		public static readonly Serializer Simple = new Serializer ();
 
 		/// <summary>
 		/// When set to true, the keyword undefined is used instead of null
